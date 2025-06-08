@@ -649,11 +649,18 @@ class VideoEditorApp:
             self.update_status_textbox("Cancelamento solicitado... Aguardando a tarefa terminar.", tag="warning")
 
     def _processing_thread_done_callback(self, future):
-        try: future.result()
+        try:
+            # Garante que exceções sejam registradas corretamente. A função
+            # process_entrypoint envia sua própria mensagem de finalização, por
+            # isso não precisamos colocar 'finish' aqui em condições normais.
+            future.result()
         except Exception as e:
-            logger.error(f"Exceção na thread de processamento: {e}", exc_info=True)
+            logger.error(
+                f"Exceção na thread de processamento: {e}", exc_info=True
+            )
             self.progress_queue.put(("status", f"Erro fatal na thread: {e}", "error"))
-        finally:
+            # Em casos de exceção pode ser que nenhuma mensagem de finalização
+            # seja enviada, então notificamos a interface com falha.
             self.progress_queue.put(("finish", False))
 
     def _finalize_processing_ui_state(self, success: bool):
