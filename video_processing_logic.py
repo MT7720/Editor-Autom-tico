@@ -378,31 +378,51 @@ def _run_slideshow_processing(params: Dict[str, Any], progress_queue: Queue, can
     if not images_to_use:
         progress_queue.put(("status", "Erro: Nenhuma imagem para usar no slideshow.", "error")); return False
 
-    concat_file_path = os.path.join(temp_dir, "imagelist.txt")
-    try:
-        with open(concat_file_path, 'w', encoding='utf-8') as f:
-            for img_path in images_to_use:
-                f.write(f"file '{Path(img_path).as_posix()}'\n")
-                f.write(f"duration {img_duration}\n")
-        
-        with open(concat_file_path, 'a', encoding='utf-8') as f:
-            f.write(f"file '{Path(images_to_use[-1]).as_posix()}'\n")
-    except Exception as e:
-        logger.error(f"Erro ao escrever o arquivo de concatenação: {e}", exc_info=True)
-        progress_queue.put(("status", f"Erro CRÍTICO ao preparar o slideshow: {e}", "error")); return False
-
+    def _motion_filter(motion: str, width: int, height: int, duration: float) -> str:
+        fps = 30
+        total_frames = max(int(duration * fps), 1)
+        if motion == "Aleatório":
+            motion = random.choice(["Zoom In", "Zoom Out", "Pan Esquerda", "Pan Direita", "Nenhum"])
+        if motion == "Zoom In":
+            return f"zoompan=z='min(zoom+0.0015,1.5)':d={total_frames}:s={width}x{height}:fps={fps}"
+        elif motion == "Zoom Out":
+            return f"zoompan=z='max(zoom-0.0015,1)':d={total_frames}:s={width}x{height}:fps={fps}"
+        elif motion == "Pan Esquerda":
+            return f"zoompan=z=1:x='iw-(on/{total_frames})*iw':y=0:d={total_frames}:s={width}x{height}:fps={fps}"
+        elif motion == "Pan Direita":
+            return f"zoompan=z=1:x='(on/{total_frames})*iw':y=0:d={total_frames}:s={width}x{height}:fps={fps}"
+        else:
+            return f"scale={width}:{height},setsar=1,fps={fps}"
 
     base_video_path = os.path.join(temp_dir, "slideshow_video.mp4")
     w, h = _parse_resolution(params['resolution'])
-    
-    video_filters = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
-    
+    transition = params.get('slideshow_transition', 'fade')
+    motion = params.get('slideshow_motion', 'Nenhum')
+    transition_dur = 1
+
+    inputs, filter_parts = [], []
+    for idx, img_path in enumerate(images_to_use):
+        img_len = img_duration + (transition_dur if idx < len(images_to_use) - 1 else 0)
+        inputs.extend(["-loop", "1", "-t", str(img_len), "-i", img_path])
+        filt = _motion_filter(motion, w, h, img_len)
+        filter_parts.append(f"[{idx}:v]{filt}[v{idx}]")
+
+    last = "v0"
+    offset = img_duration
+    for idx in range(1, len(images_to_use)):
+        filter_parts.append(f"[{last}][v{idx}]xfade=transition={transition}:duration={transition_dur}:offset={offset}[x{idx}]")
+        last = f"x{idx}"
+        offset += img_duration
+
+    filter_complex = ";".join(filter_parts)
+
     cmd_video = [
         params['ffmpeg_path'], "-y",
-        "-f", "concat", "-safe", "0", "-i", concat_file_path,
-        "-vf", video_filters,
-        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+        *inputs,
+        "-filter_complex", filter_complex,
+        "-map", f"[{last}]",
         "-t", str(narration_duration),
+        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
         base_video_path
     ]
     
