@@ -1,0 +1,4 @@
+pytest
+ttkbootstrap
+pillow
+pyvirtualdisplay
