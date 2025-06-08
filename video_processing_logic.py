@@ -87,9 +87,20 @@ def _execute_ffmpeg(cmd: List[str], duration: float, progress_callback: Callable
     cmd_with_progress = cmd[:1] + ["-progress", "pipe:1", "-nostats"] + cmd[1:]
     creation_flags = subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
 
-    if platform.system() == "Windows" and len(subprocess.list2cmdline(cmd_with_progress)) > 32000:
+    cmd_str = subprocess.list2cmdline(cmd_with_progress)
+    if platform.system() == "Windows" and len(cmd_str) > 8000:
+        # On Windows the command line length is limited (~8k). Use FFmpeg's
+        # argument file feature to avoid this limitation. The arguments are
+        # written to a separate file which ffmpeg will load.
+        args_only = ' '.join(subprocess.list2cmdline([arg]) for arg in cmd_with_progress[1:])
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".args", mode="w", encoding="utf-8") as f:
+            f.write(args_only)
+            arg_file = f.name
+        logger.debug(f"[{log_prefix}] Comando muito longo, usando arquivo de argumentos {arg_file}")
+        cmd_exec = [cmd_with_progress[0], f"@{arg_file}"]
+    elif platform.system() == "Windows" and len(cmd_str) > 32000:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".bat", mode="w", encoding="utf-8") as f:
-            f.write(subprocess.list2cmdline(cmd_with_progress))
+            f.write(cmd_str)
             script_path = f.name
         logger.debug(f"[{log_prefix}] Comando muito longo, usando script temporário {script_path}")
         cmd_exec = ["cmd", "/C", script_path]
