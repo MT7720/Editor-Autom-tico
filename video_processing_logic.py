@@ -318,10 +318,14 @@ def _run_single_item_processing(params: Dict[str, Any], progress_queue: Queue, c
         audio_to_mix.append("[music]")
 
     if len(audio_to_mix) > 1:
-        filter_complex_parts.append(f"{''.join(audio_to_mix)}amix=inputs={len(audio_to_mix)}:duration=first:dropout_transition=3[aout]")
+        filter_complex_parts.append(
+            f"{''.join(audio_to_mix)}amix=inputs={len(audio_to_mix)}:duration=first:dropout_transition=3[aout]"
+        )
         map_args.extend(["-map", "[aout]"])
     elif len(audio_to_mix) == 1:
-        map_args.extend(["-map", f"[{audio_input_count}:a]"])
+        # When only one audio source is present, map the filtered output
+        # (e.g. '[narrated]' or '[music]') instead of the raw input index.
+        map_args.extend(["-map", audio_to_mix[0]])
     
     video_filters = []
     force_reencode = not (source_w == target_w and source_h == target_h)
