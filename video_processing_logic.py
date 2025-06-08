@@ -1,10 +1,10 @@
 import subprocess
+import tempfile
 import platform
 import os
 import re
 import math
 import glob
-import tempfile
 import shutil
 import json
 import logging
@@ -86,8 +86,17 @@ def _execute_ffmpeg(cmd: List[str], duration: float, progress_callback: Callable
     
     cmd_with_progress = cmd[:1] + ["-progress", "pipe:1", "-nostats"] + cmd[1:]
     creation_flags = subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
-    
-    process = subprocess.Popen(cmd_with_progress, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creation_flags)
+
+    if platform.system() == "Windows" and len(subprocess.list2cmdline(cmd_with_progress)) > 32000:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".bat", mode="w", encoding="utf-8") as f:
+            f.write(subprocess.list2cmdline(cmd_with_progress))
+            script_path = f.name
+        logger.debug(f"[{log_prefix}] Comando muito longo, usando script temporário {script_path}")
+        cmd_exec = ["cmd", "/C", script_path]
+    else:
+        cmd_exec = cmd_with_progress
+
+    process = subprocess.Popen(cmd_exec, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creation_flags)
     process_manager.add(process)
     
     output_queue = Queue()
