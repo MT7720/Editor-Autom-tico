@@ -1,12 +1,10 @@
-# Editor Automtico
+# Editor-Autom-tico
 
-This repository contains a simplified video editor application using `ttkbootstrap` and helper utilities for FFmpeg.
+Este repositório contém um editor de vídeo simplificado usando `ttkbootstrap` e utilitários para FFmpeg.
 
-## Running tests
+## Executando a interface gráfica
 
-Install dependencies and execute the test suite with `pytest`:
+Para iniciar a interface gráfica, basta executar:
 
 ```bash
-pip install -r requirements.txt
-pytest
-```
+python main.py
